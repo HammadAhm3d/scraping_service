@@ -50,7 +50,10 @@ async function searchProducts(req, res) {
     const total = response.hits.total.value; // Get the total number of matching products
     // Calculate total pages based on total and size
     const totalPages = Math.ceil(total / size);
-    res.json({ products, pagination: { total, page, totalPages } });
+    res.json({
+      products,
+      pagination: { total, page: parseInt(page), totalPages },
+    });
   } catch (error) {
     console.error("Error searching products:", error);
     res.status(500).json({ message: "Error searching products" });
