@@ -22,7 +22,7 @@ async function scrapeData(req, res) {
 
     // Extract category from the specified element
     const category = $(
-      ".SearchResultsHeader__SearchTitleContainer-sc-1xli5ex-4 h1"
+      ".SearchResultsHeader__SearchTitleContainer-sc-1xli5ex-5 h1"
     )
       .text()
       .trim();
@@ -63,7 +63,7 @@ async function scrapeData(req, res) {
         .find('img[data-testid="product-image"]')
         .attr("src");
 
-      const product = new Product({
+      const product = {
         name,
         price,
         pricePerUnit,
@@ -71,12 +71,18 @@ async function scrapeData(req, res) {
         category,
         subCategory: category, // Assigning category to subCategory as per your earlier requirement
         image,
-      });
+      };
       products.push(product);
     });
 
-    // Save products to MongoDB
-    await Product.insertMany(products);
+    // Save or update products in MongoDB
+    for (const product of products) {
+      await Product.findOneAndUpdate({ name: product.name }, product, {
+        upsert: true,
+        new: true,
+        runValidators: true,
+      });
+    }
     await browser.close();
 
     if (products.length === 0) {
@@ -108,6 +114,4 @@ async function autoScroll(page) {
     });
   });
 }
-module.exports = {
-  scrapeData,
-};
+module.exports = scrapeData;

@@ -2,7 +2,6 @@ const express = require("express");
 const morgan = require("morgan");
 const cors = require("cors");
 const dotenv = require("dotenv");
-const scrapeRoutes = require("./routes/scrape");
 const productRoutes = require("./routes/product");
 const connectDB = require("./config/db");
 const { Client } = require("@elastic/elasticsearch");
@@ -33,6 +32,5 @@ app.locals.elasticClient = client; // Make the client accessible throughout the 
 app.get("/", function (req, res) {
   return res.send("Hello World");
 });
-app.use("/api/scrape", scrapeRoutes);
 app.use("/api/products", productRoutes);
 app.listen(PORT, () => console.log(`Server Listening on port ${PORT}`));
