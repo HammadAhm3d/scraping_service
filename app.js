@@ -2,9 +2,11 @@ const express = require("express");
 const morgan = require("morgan");
 const cors = require("cors");
 const dotenv = require("dotenv");
+const cron = require("node-cron");
 const productRoutes = require("./routes/product");
 const connectDB = require("./config/db");
 const { Client } = require("@elastic/elasticsearch");
+const { scrapingScript } = require("./controllers/scrapeController");
 
 // Load config
 dotenv.config({ path: "./.env" });
@@ -17,16 +19,38 @@ const app = express();
 connectDB();
 
 const client = new Client({
-  node: process.env.ELASTIC_CLIENT || "http://localhost:9200",
+  node: process.env.ELASTIC_CLIENT,
   auth: {
-    apiKey: "aHFVQnZZOEJsZ09ydzlNc25xaU06YlhIZmh5SERSWFd0WnczTkZ6NWM0QQ==",
+    apiKey: process.env.ELASTIC_API_KEY,
   },
-}); // Replace with your Elasticsearch instance URL
+});
 // Init Middleware
 app.use(cors()); // add cors headers
 app.use(morgan("tiny")); // log the request for debugging
 app.use(express.json({ extended: false }));
 app.locals.elasticClient = client; // Make the client accessible throughout the app
+
+// scheduler to scrape products at 1 am every night
+cron.schedule(
+  "0 1 * * *",
+  async () => {
+    try {
+      console.log(
+        `starting the scheduled job at ${new Date().toLocaleTimeString()}`
+      );
+      const products = await scrapingScript();
+      console.log(`${products?.length} products extracted.`);
+      console.log(
+        `ending the scheduled job at ${new Date().toLocaleTimeString()}`
+      );
+    } catch (error) {
+      console.error("Error scraping data:", error);
+    }
+  },
+  {
+    timezone: "Europe/Helsinki",
+  }
+);
 
 // Define Routes
 app.get("/", function (req, res) {

@@ -2,89 +2,101 @@ const cheerio = require("cheerio");
 const Product = require("../models/product");
 const puppeteer = require("puppeteer");
 
-async function scrapeData(req, res) {
+async function scrapingScript() {
   const url = "https://www.k-ruoka.fi/kauppa/tuotehaku/hedelmat-ja-vihannekset";
 
-  try {
-    const browser = await puppeteer.launch({ headless: true });
-    const page = await browser.newPage();
+  const browser = await puppeteer.launch({
+    executablePath: "/usr/bin/google-chrome",
+    args: ["--no-sandbox", "--disable-setuid-sandbox"],
+    headless: true,
+  });
+  const page = await browser.newPage();
 
-    await page.setUserAgent(
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-    );
-    await page.goto(url, { waitUntil: "networkidle2", timeout: 0 });
+  await page.setUserAgent(
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+  );
+  await page.goto(url, { waitUntil: "networkidle2", timeout: 0 });
 
-    // Scroll to the bottom of the page to load all products
-    await autoScroll(page);
+  // Scroll to the bottom of the page to load all products
+  await autoScroll(page);
 
-    const content = await page.content();
-    const $ = cheerio.load(content);
+  const content = await page.content();
+  const $ = cheerio.load(content);
 
-    // Extract category from the specified element
-    const category = $(
-      ".SearchResultsHeader__SearchTitleContainer-sc-1xli5ex-5 h1"
-    )
+  // Extract category from the specified element
+  const category = $(
+    ".SearchResultsHeader__SearchTitleContainer-sc-1xli5ex-5 h1"
+  )
+    .text()
+    .trim();
+
+  const products = [];
+
+  $(
+    'ul[data-testid="product-search-results"] > li[data-testid="product-card"]'
+  ).each((index, element) => {
+    const name = $(element)
+      .find('div[data-testid="product-name"]')
       .text()
       .trim();
+    const priceString = $(element)
+      .find('span[data-testid="product-price"]')
+      .text()
+      .trim();
+    const cleanedPriceString = priceString.match(/\d+(,\d+)?/g); // Remove non-numeric characters except decimal points and commas
+    const price = parseFloat(cleanedPriceString[0].replace(",", ".")); // Convert price to number
 
-    const products = [];
+    let pricePerUnit = price; // Default to price when unit price is not present
+    let unitType = "kpl"; // Default unit type to 'piece'
 
-    $(
-      'ul[data-testid="product-search-results"] > li[data-testid="product-card"]'
-    ).each((index, element) => {
-      const name = $(element)
-        .find('div[data-testid="product-name"]')
-        .text()
-        .trim();
-      const priceString = $(element)
-        .find('span[data-testid="product-price"]')
-        .text()
-        .trim();
-      const cleanedPriceString = priceString.match(/\d+(,\d+)?/g); // Remove non-numeric characters except decimal points and commas
-      const price = parseFloat(cleanedPriceString[0].replace(",", ".")); // Convert price to number
-
-      let pricePerUnit = price; // Default to price when unit price is not present
-      let unitType = "kpl"; // Default unit type to 'piece'
-
-      const unitPriceString = $(element)
-        .find('div[data-testid="product-unit-price"]')
-        .text()
-        .trim();
-      if (unitPriceString) {
-        const unitPriceParts = unitPriceString.match(/\d+(,\d+)?/g); // Extract numeric parts
-        pricePerUnit = parseFloat(unitPriceParts[0].replace(",", "."));
-        unitType = unitPriceString.includes("kg")
-          ? "kg"
-          : unitPriceString.includes("l")
-          ? "l"
-          : "kpl";
-      }
-      const image = $(element)
-        .find('img[data-testid="product-image"]')
-        .attr("src");
-
-      const product = {
-        name,
-        price,
-        pricePerUnit,
-        unitType,
-        category,
-        subCategory: category, // Assigning category to subCategory as per your earlier requirement
-        image,
-      };
-      products.push(product);
-    });
-
-    // Save or update products in MongoDB
-    for (const product of products) {
-      await Product.findOneAndUpdate({ name: product.name }, product, {
-        upsert: true,
-        new: true,
-        runValidators: true,
-      });
+    const unitPriceString = $(element)
+      .find('div[data-testid="product-unit-price"]')
+      .text()
+      .trim();
+    if (unitPriceString) {
+      const unitPriceParts = unitPriceString.match(/\d+(,\d+)?/g); // Extract numeric parts
+      pricePerUnit = parseFloat(unitPriceParts[0].replace(",", "."));
+      unitType = unitPriceString.includes("kg")
+        ? "kg"
+        : unitPriceString.includes("l")
+        ? "l"
+        : "kpl";
     }
-    await browser.close();
+    const image = $(element)
+      .find('img[data-testid="product-image"]')
+      .attr("src");
 
+    const product = {
+      name,
+      price,
+      pricePerUnit,
+      unitType,
+      category,
+      subCategory: category, // Assigning category to subCategory as per your earlier requirement
+      image,
+    };
+    products.push(product);
+  });
+
+  // Save or update products in MongoDB
+  for (const product of products) {
+    await Product.findOneAndUpdate({ name: product.name }, product, {
+      upsert: true,
+      new: true,
+      runValidators: true,
+    });
+  }
+  await browser.close();
+
+  if (products.length === 0) {
+    console.log("No products found");
+  }
+
+  return products;
+}
+async function scrapeData(req, res) {
+  try {
+    const products = await scrapingScript();
     if (products.length === 0) {
       console.log("No products found");
     }
@@ -114,4 +126,4 @@ async function autoScroll(page) {
     });
   });
 }
-module.exports = scrapeData;
+module.exports = { scrapeData, scrapingScript };

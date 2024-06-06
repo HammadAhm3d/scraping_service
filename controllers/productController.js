@@ -13,16 +13,6 @@ async function searchProducts(req, res) {
       size, // Define the number of results per page
     };
 
-    // if (query) {
-    //   searchBody.query.bool.must.push({
-    //     multi_match: {
-    //       query,
-    //       fields: ["name", "category", "subCategory"], // Search in these fields
-    //       fuzziness: "auto", // Allow for some typos
-    //     },
-    //   });
-    // }
-
     if (query) {
       searchBody.query.bool.must.push({
         match_bool_prefix: { name: { query, fuzziness: "AUTO" } },
